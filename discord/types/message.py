@@ -148,3 +148,12 @@ class AllowedMentions(TypedDict):
     roles: SnowflakeList
     users: SnowflakeList
     replied_user: bool
+
+
+class Component(TypedDict, total=False):
+    type: int
+    components: List[Component]
+    label: str
+    style: int
+    custom_id: str
+    url: str

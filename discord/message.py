@@ -22,16 +22,19 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 """
 
+from __future__ import annotations
+
 import asyncio
 import datetime
 import re
 import io
+from typing import TYPE_CHECKING, List, Optional, Union
 
 from . import utils
 from .reaction import Reaction
 from .emoji import Emoji
 from .partial_emoji import PartialEmoji
-from .enums import MessageType, ChannelType, try_enum
+from .enums import MessageType, ChannelType, ComponentType, ComponentStyle, try_enum
 from .errors import InvalidArgument, ClientException, HTTPException
 from .embeds import Embed
 from .member import Member
@@ -42,12 +45,16 @@ from .guild import Guild
 from .mixins import Hashable
 from .sticker import Sticker
 
+if TYPE_CHECKING:
+    from .types.message import Component as ComponentData
+
 __all__ = (
     'Attachment',
     'Message',
     'PartialMessage',
     'MessageReference',
     'DeletedReferencedMessage',
+    'Component'
 )
 
 def convert_emoji_reaction(emoji):
@@ -533,7 +540,7 @@ class Message(Hashable):
                  '_cs_clean_content', '_cs_raw_channel_mentions', 'nonce', 'pinned',
                  'role_mentions', '_cs_raw_role_mentions', 'type', 'flags',
                  '_cs_system_content', '_cs_guild', '_state', 'reactions', 'reference',
-                 'application', 'activity', 'stickers')
+                 'application', 'activity', 'stickers', 'components')
 
     def __init__(self, *, state, channel, data):
         self._state = state
@@ -554,6 +561,7 @@ class Message(Hashable):
         self.content = data['content']
         self.nonce = data.get('nonce')
         self.stickers = [Sticker(data=data, state=state) for data in data.get('stickers', [])]
+        self.components = [Component.from_data(component) for component in data.get("components", [])]
 
         try:
             ref = data['message_reference']
@@ -1535,3 +1543,64 @@ class PartialMessage(Hashable):
 
         if fields:
             return self._state.create_message(channel=self.channel, data=data)
+
+class Component:
+    """
+    A component for a message.
+
+    .. versionadded:: 2.0
+
+    Attributes
+    -----------
+    type :class:`ComponentType`
+        The type of component
+    
+    components: Optional[List[:class:`Component`]]
+        The list of child components
+    """
+    
+    __slots__ = ('type', 'components', 'label', 'style', 'custom_id', 'url')
+
+    def __init__(self, *, type: ComponentType, components: Optional[List[Component]] = None, label: str = None, style: Optional[ComponentStyle] = None, custom_id: str = None, url: str = None):
+        self.type = type
+        self.components = components
+        self.label = label
+        self.style = style
+        self.custom_id = custom_id
+        self.url = url
+
+    @classmethod
+    def from_data(cls, data: ComponentData):
+        type = try_enum(ComponentType, data['type'])  # type: ignore
+        
+        style = data.get('style')
+        if style is not None:
+            style = try_enum(ComponentStyle, style)
+
+        label = data.get('label')
+        url = data.get('url')
+
+        custom_id = data.get('custom_id')
+
+        components = [cls.from_data(component) for component in data.get('components', [])]
+        return cls(type=type, components=components, label=label, style=style, custom_id=custom_id, url=url)
+
+    def to_dict(self) -> ComponentData:
+        data: ComponentData = {"type": self.type.value}
+        
+        if self.components:
+            data['components'] = [component.to_dict() for component in self.components]
+        
+        if self.label is not None:
+            data['label'] = self.label
+        
+        if self.style is not None:
+            data['style'] = self.style.value
+        
+        if self.custom_id is not None:
+            data['custom_id'] = self.custom_id
+
+        if self.url is not None:
+            data['url'] = self.url
+
+        return data
