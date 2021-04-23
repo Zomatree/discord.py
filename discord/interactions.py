@@ -29,6 +29,9 @@ from typing import Optional, TYPE_CHECKING
 
 from . import utils
 from .enums import try_enum, InteractionType
+from .user import User
+from .member import Member
+from .message import Message
 
 __all__ = (
     'Interaction',
@@ -81,6 +84,7 @@ class Interaction:
         'token',
         'version',
         '_state',
+        'message'
     )
 
     def __init__(self, *, data: InteractionPayload, state=None):
@@ -96,6 +100,12 @@ class Interaction:
         self.channel_id = utils._get_as_snowflake(data, 'channel_id')
         self.guild_id = utils._get_as_snowflake(data, 'guild_id')
         self.application_id = utils._get_as_snowflake(data, 'application_id')
+        self.message = Message(data=data.get("message"), channel=None, state=self._state)
+
+        if member := data.get("member"):
+            self.user = Member(data=member, state=self._state, guild=None)  # type: ignore
+        else:
+            self.user = User(data=data.get("user"), state=self._state)
 
     @property
     def guild(self) -> Optional[Guild]:

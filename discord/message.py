@@ -28,7 +28,7 @@ import asyncio
 import datetime
 import re
 import io
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING, List, Optional, Union, Tuple
 
 from . import utils
 from .reaction import Reaction
@@ -46,7 +46,7 @@ from .mixins import Hashable
 from .sticker import Sticker
 
 if TYPE_CHECKING:
-    from .types.message import Component as ComponentData
+    from .types.message import Component as ComponentData, Button as ButtonData, PartialEmoji
 
 __all__ = (
     'Attachment',
@@ -54,7 +54,8 @@ __all__ = (
     'PartialMessage',
     'MessageReference',
     'DeletedReferencedMessage',
-    'Component'
+    'Component',
+    'Button'
 )
 
 def convert_emoji_reaction(emoji):
@@ -557,7 +558,7 @@ class Message(Hashable):
                  '_cs_clean_content', '_cs_raw_channel_mentions', 'nonce', 'pinned',
                  'role_mentions', '_cs_raw_role_mentions', 'type', 'flags',
                  '_cs_system_content', '_cs_guild', '_state', 'reactions', 'reference',
-                 'application', 'activity', 'stickers', 'components')
+                 'application', 'activity', 'stickers', 'components', 'buttons')
 
     def __init__(self, *, state, channel, data):
         self._state = state
@@ -578,7 +579,8 @@ class Message(Hashable):
         self.content = data['content']
         self.nonce = data.get('nonce')
         self.stickers = [Sticker(data=data, state=state) for data in data.get('stickers', [])]
-        self.components = [Component.from_data(component) for component in data.get("components", [])]
+        
+        self.buttons = [Button.from_data(component) for component in data.get("components", []) if component["type"] is ComponentType.buttons.value]
 
         try:
             ref = data['message_reference']
@@ -1102,6 +1104,12 @@ class Message(Hashable):
             pass
         else:
             fields['attachments'] = [a.to_dict() for a in attachments]
+        buttons = fields.get('buttons')
+        if not buttons:
+            buttons = [fields.get('button')]
+        
+        if buttons:
+            fields['components'] = [component.to_dict() for component in buttons]
 
         if fields:
             data = await self._state.http.edit_message(self.channel.id, self.id, **fields)
@@ -1582,19 +1590,61 @@ class Component:
     type :class:`ComponentType`
         The type of component
     
-    components: Optional[List[:class:`Component`]]
+    """
+    __slots__: str = "type"
+
+    def __init__(self, *, type: ComponentType):
+        self.type = type
+
+    def to_dict(self) -> ComponentData:
+        return {"type": self.type.value}
+
+class Button(Component):
+    """
+    A button for a message.
+
+    .. versionadded:: 2.0
+
+    Attributes
+    -----------
+    type :class:`ComponentType`
+        The type of component
+    
+    buttons: Optional[List[:class:`Component`]]
         The list of child components
+    
+    button: Optional[:class:`Component`]
+        the child component
+
+    label: Optional[:class:`str`]
+        The label of the component, if any.
+    
+    style: Optional[:class:`ComponentStyle`]
+        The style of the button, this change the colour and whether it is a hyperlink.
+
+        Hyperlink buttons must use :attr:`url` instead of :attr`custom_id`.
+    
+    custom_id: Optional[:class:`str`]
+        Used to tell the non-hyperlink buttons apart from eachother
+
+    url: Optional[:class:`str`]
+        The url for hyperlinks to redirect you to
     """
     
-    __slots__ = ('type', 'components', 'label', 'style', 'custom_id', 'url')
+    __slots__: Tuple[str, ...] = ('type', 'buttons', 'label', 'style', 'custom_id', 'url', 'emoji')
 
-    def __init__(self, *, type: ComponentType, components: Optional[List[Component]] = None, label: str = None, style: Optional[ComponentStyle] = None, custom_id: str = None, url: str = None):
-        self.type = type
-        self.components = components
+    def __init__(self, *, type: ComponentType, buttons: Optional[List[Button]] = None, button: Optional[Button] = None, label: str = None, style: Optional[ComponentStyle] = None, custom_id: str = None, url: str = None, emoji=None):
+        super().__init__(type=type)
+
+        if button:
+            buttons = [button]
+
+        self.buttons = buttons 
         self.label = label
         self.style = style
         self.custom_id = custom_id
         self.url = url
+        self.emoji = emoji
 
     @classmethod
     def from_data(cls, data: ComponentData):
@@ -1610,13 +1660,13 @@ class Component:
         custom_id = data.get('custom_id')
 
         components = [cls.from_data(component) for component in data.get('components', [])]
-        return cls(type=type, components=components, label=label, style=style, custom_id=custom_id, url=url)
+        return cls(type=type, buttons=components, label=label, style=style, custom_id=custom_id, url=url)
 
-    def to_dict(self) -> ComponentData:
-        data: ComponentData = {"type": self.type.value}
+    def to_dict(self) -> ButtonData:
+        data: ButtonData = {"type": self.type.value}
         
-        if self.components:
-            data['components'] = [component.to_dict() for component in self.components]
+        if self.buttons:
+            data['components'] = [component.to_dict() for component in self.buttons]
         
         if self.label is not None:
             data['label'] = self.label
@@ -1629,5 +1679,16 @@ class Component:
 
         if self.url is not None:
             data['url'] = self.url
+
+        if self.emoji is not None:
+            emoji: PartialEmoji = {}
+            
+            if id := self.emoji.get('id'):
+                emoji['id'] = str(id)
+            
+            if name := self.emoji.get('name'):
+                emoji['name'] = name
+
+            data['emoji'] = emoji
 
         return data

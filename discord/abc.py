@@ -982,7 +982,7 @@ class Messageable(Protocol):
     async def send(self, content=None, *, tts=False, embed=None, file=None,
                                           files=None, delete_after=None, nonce=None,
                                           allowed_mentions=None, reference=None,
-                                          mention_author=None, component=None, components=None):
+                                          mention_author=None, button=None, buttons=None):
         """|coro|
 
         Sends a message to the destination with the content given.
@@ -1041,13 +1041,13 @@ class Messageable(Protocol):
 
             .. versionadded:: 1.6
         
-        component: Optional[:class:`Component`]
-            The component to add to the message
+        button: Optional[:class:`Button`]
+            The button to add to the message
 
             .. versionadded:: 2.0
         
-        components: Optional[List[:class:`Component`]]
-            The components to add to the message
+        buttons: Optional[List[:class:`Buttons`]]
+            The buttons to add to the message
 
             .. versionadded:: 2.0
 
@@ -1075,10 +1075,12 @@ class Messageable(Protocol):
         if embed is not None:
             embed = embed.to_dict()
 
-        if components:
-            components = [component.to_dict() for component in components]
-        elif component:
-            components = [component.to_dict()]
+        if buttons:
+            components = [component.to_dict() for component in buttons]
+        elif button:
+            components = [button.to_dict()]
+        else:
+            components = None
 
         if allowed_mentions is not None:
             if state.allowed_mentions is not None:

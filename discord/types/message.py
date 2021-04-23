@@ -150,10 +150,19 @@ class AllowedMentions(TypedDict):
     replied_user: bool
 
 
-class Component(TypedDict, total=False):
+class PartialEmoji(TypedDict, total=False):
+    name: str
+    id: str
+
+
+class Component(TypedDict):
     type: int
+
+
+class Button(Component, total=False):
     components: List[Component]
     label: str
     style: int
     custom_id: str
     url: str
+    emoji: PartialEmoji
